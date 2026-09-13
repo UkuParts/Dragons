@@ -1,48 +1,33 @@
-# frontend
+# Dragons of Mugloar - frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + TypeScript SPA (Vite, Vitest) for the Dragons of Mugloar player. It only talks to the
+Spring Boot backend under `/api`; the Vite dev server proxies `/api` to `http://localhost:8080`.
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Project setup
 
 ```sh
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+### Development
+
+Run the backend on `:8080`, then:
 
 ```sh
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+### Tests and checks
 
 ```sh
-npm run build
+npm run test:unit -- --run  # unit tests once
+npm run type-check          # vue-tsc
+npm run build               # type-check + production build
+npm run format              # prettier
 ```
 
-### Run Unit Tests with [Vitest](https://vitest.dev/)
+### Routes
 
-```sh
-npm run test:unit
-```
+- `/` - mode selection
+- `/manual` - manual play
+- `/automatic` - automatic play (placeholder)

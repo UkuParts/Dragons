@@ -10,10 +10,11 @@
     "test:unit": "vitest",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/ vite.config.ts vitest.config.ts"
   },
   "dependencies": {
-    "vue": "^3.5.40"
+    "vue": "^3.5.40",
+    "vue-router": "^5.3.1"
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
