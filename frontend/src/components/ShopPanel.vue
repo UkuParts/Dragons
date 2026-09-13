@@ -5,6 +5,7 @@ defineProps<{
   items: ShopItem[]
   gold: number
   busy: boolean
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{ buy: [itemId: string] }>()
@@ -23,6 +24,7 @@ const emit = defineEmits<{ buy: [itemId: string] }>()
           <p class="shop__cost">{{ item.cost }} gold</p>
         </div>
         <button
+          v-if="!readOnly"
           class="button"
           type="button"
           :disabled="busy || item.cost > gold"

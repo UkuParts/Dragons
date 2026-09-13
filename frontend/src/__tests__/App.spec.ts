@@ -4,16 +4,21 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 const gameApiMock = vi.hoisted(() => ({
   startGame: vi.fn(),
-  getTasks: vi.fn(),
+  getState: vi.fn(),
   solveTask: vi.fn(),
-  getShop: vi.fn(),
   buyItem: vi.fn(),
   investigateReputation: vi.fn(),
 }))
 
+const autoApiMock = vi.hoisted(() => ({
+  nextMove: vi.fn(),
+}))
+
 vi.mock('@/services/gameApi', () => ({ gameApi: gameApiMock }))
+vi.mock('@/services/autoApi', () => ({ autoApi: autoApiMock }))
 
 import App from '@/App.vue'
+import { gameState } from '@/__tests__/fixtures'
 import { routes } from '@/router'
 
 function createTestRouter() {
@@ -22,18 +27,16 @@ function createTestRouter() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  gameApiMock.startGame.mockResolvedValue({
-    gameId: 'game-1',
-    lives: 3,
-    gold: 0,
-    level: 0,
-    score: 0,
-    highScore: 0,
-    turn: 0,
+  gameApiMock.startGame.mockResolvedValue(gameState())
+  gameApiMock.getState.mockResolvedValue(gameState())
+  gameApiMock.solveTask.mockResolvedValue(gameState())
+  gameApiMock.buyItem.mockResolvedValue(gameState())
+  gameApiMock.investigateReputation.mockResolvedValue(gameState())
+  autoApiMock.nextMove.mockResolvedValue({
+    finished: true,
+    reason: 'GAME_OVER',
+    state: gameState({ lives: 0 }),
   })
-  gameApiMock.getTasks.mockResolvedValue([])
-  gameApiMock.getShop.mockResolvedValue([])
-  gameApiMock.investigateReputation.mockResolvedValue({ people: 0, state: 0, underworld: 0 })
 })
 
 describe('App', () => {
@@ -52,10 +55,9 @@ describe('App', () => {
     expect(router.currentRoute.value.name).toBe('manual')
     expect(wrapper.text()).toContain('Manual run')
     expect(gameApiMock.startGame).toHaveBeenCalled()
-    expect(gameApiMock.getTasks).toHaveBeenCalledWith('game-1')
   })
 
-  it('opens the automatic placeholder and returns home', async () => {
+  it('opens the automatic run and returns home', async () => {
     const router = createTestRouter()
     const wrapper = mount(App, { global: { plugins: [router] } })
     await router.isReady()
@@ -66,6 +68,7 @@ describe('App', () => {
 
     expect(router.currentRoute.value.name).toBe('automatic')
     expect(wrapper.text()).toContain('Automatic run')
+    expect(autoApiMock.nextMove).toHaveBeenCalledWith('game-1')
 
     const backHome = wrapper.findAll('a').find((link) => link.text() === 'Back home')
     await backHome?.trigger('click')

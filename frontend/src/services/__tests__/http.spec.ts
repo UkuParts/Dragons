@@ -4,10 +4,11 @@ import { ApiError, http } from '@/services/http'
 
 const fetchMock = vi.fn()
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(headers),
     json: () => Promise.resolve(body),
   } as Response
 }
@@ -63,6 +64,31 @@ describe('http', () => {
       name: 'ApiError',
       message: 'The game API is down.',
       status: 502,
+      retryAfterMs: null,
+    })
+  })
+
+  it('parses a numeric Retry-After header', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: 'Slow down.' }, 429, { 'Retry-After': '7' }))
+
+    await expect(http('/games')).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 7000,
+    })
+  })
+
+  it('parses an HTTP-date Retry-After header', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-13T12:00:00Z'))
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: 'Slow down.' }, 429, {
+        'Retry-After': 'Sun, 13 Sep 2026 12:00:05 GMT',
+      }),
+    )
+
+    await expect(http('/games')).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 5000,
     })
   })
 
@@ -70,6 +96,7 @@ describe('http', () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
+      headers: new Headers(),
       json: () => Promise.reject(new SyntaxError('Unexpected token')),
     } as unknown as Response)
 

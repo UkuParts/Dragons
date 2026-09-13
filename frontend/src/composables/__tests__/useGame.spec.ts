@@ -2,9 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const gameApiMock = vi.hoisted(() => ({
   startGame: vi.fn(),
-  getTasks: vi.fn(),
+  getState: vi.fn(),
   solveTask: vi.fn(),
-  getShop: vi.fn(),
   buyItem: vi.fn(),
   investigateReputation: vi.fn(),
 }))
@@ -12,98 +11,48 @@ const gameApiMock = vi.hoisted(() => ({
 vi.mock('@/services/gameApi', () => ({ gameApi: gameApiMock }))
 
 import { useGame } from '@/composables/useGame'
+import { gameState, task } from '@/__tests__/fixtures'
 import { ApiError } from '@/services/http'
 
 const game = useGame()
 
-const defaultGame = {
-  gameId: 'game-1',
-  lives: 3,
-  gold: 0,
-  level: 0,
-  score: 0,
-  highScore: 0,
-  turn: 0,
-}
-
-async function beginGame(): Promise<void> {
-  gameApiMock.startGame.mockResolvedValue(defaultGame)
-  await game.startGame()
-}
-
 beforeEach(async () => {
   vi.clearAllMocks()
-  gameApiMock.startGame.mockResolvedValue(defaultGame)
-  gameApiMock.getTasks.mockResolvedValue([])
-  gameApiMock.getShop.mockResolvedValue([])
-  gameApiMock.investigateReputation.mockResolvedValue({ people: 0, state: 0, underworld: 0 })
+  gameApiMock.startGame.mockResolvedValue(gameState())
+  gameApiMock.getState.mockResolvedValue(gameState())
   await game.startGame()
 })
 
 describe('useGame', () => {
-  it('starts a game and loads the board', async () => {
-    gameApiMock.getTasks.mockResolvedValue([
-      {
-        adId: 'ad-1',
-        message: 'Fix a wagon',
-        reward: 10,
-        expiresIn: 7,
-        encrypted: null,
-        probability: 'Piece of cake',
-      },
-    ])
+  it('starts a game and stores the returned state', async () => {
+    gameApiMock.startGame.mockResolvedValue(
+      gameState({
+        tasks: [task],
+        shopItems: [{ id: 'hpot', name: 'Healing potion', cost: 50 }],
+        reputation: { people: 1.5, state: 0, underworld: -2 },
+        reputationTurn: 1,
+      }),
+    )
 
-    await beginGame()
+    await game.startGame()
 
     expect(game.game.value?.gameId).toBe('game-1')
     expect(game.tasks.value).toHaveLength(1)
-    expect(gameApiMock.investigateReputation).not.toHaveBeenCalled()
-  })
-
-  it('decrypts encrypted tasks before they reach the board', async () => {
-    gameApiMock.getTasks.mockResolvedValue([
-      {
-        adId: btoa('abc123'),
-        message: btoa('Infiltrate The Ivory Pygmy Posse and recover their secrets.'),
-        reward: 120,
-        expiresIn: 3,
-        encrypted: true,
-        probability: btoa('Quite likely'),
-      },
-    ])
-
-    await beginGame()
-
-    const task = game.tasks.value[0]
-    expect(task?.adId).toBe('abc123')
-    expect(task?.message).toContain('Ivory Pygmy Posse')
-    expect(task?.probability).toBe('Quite likely')
-
-    gameApiMock.solveTask.mockResolvedValue({
-      success: true,
-      lives: 2,
-      gold: 120,
-      score: 120,
-      highScore: 0,
-      turn: 1,
-      message: 'You successfully solved the mission!',
-    })
-    await game.solveTask(task?.adId ?? '')
-
-    expect(gameApiMock.solveTask).toHaveBeenCalledWith('game-1', 'abc123')
+    expect(game.shopItems.value).toHaveLength(1)
+    expect(game.reputation.value).toEqual({ people: 1.5, state: 0, underworld: -2 })
+    expect(game.reputationTurn.value).toBe(1)
+    expect(game.hasGame.value).toBe(true)
   })
 
   it('solves a task and merges the result', async () => {
-    await beginGame()
-    gameApiMock.solveTask.mockResolvedValue({
-      success: true,
-      lives: 3,
-      gold: 12,
-      score: 12,
-      highScore: 0,
-      turn: 1,
-      message: 'You successfully solved the mission!',
-    })
+    gameApiMock.solveTask.mockResolvedValue(
+      gameState({
+        gold: 12,
+        score: 12,
+        turn: 1,
+        lastMessage: 'You successfully solved the mission!',
+      }),
+    )
 
     await game.solveTask('ad-1')
 
@@ -114,17 +63,10 @@ describe('useGame', () => {
     expect(game.lastMessageFailed.value).toBe(false)
   })
 
-  it('marks a failed task outcome', async () => {
-    await beginGame()
-    gameApiMock.solveTask.mockResolvedValue({
-      success: false,
-      lives: 2,
-      gold: 0,
-      score: 0,
-      highScore: 0,
-      turn: 1,
-      message: 'You failed the mission.',
-    })
+  it('keeps a failed task outcome', async () => {
+    gameApiMock.solveTask.mockResolvedValue(
+      gameState({ lives: 2, lastMessage: 'You failed the mission.', lastMessageFailed: true }),
+    )
 
     await game.solveTask('ad-1')
 
@@ -133,117 +75,65 @@ describe('useGame', () => {
   })
 
   it('buys an item and merges the purchase result', async () => {
-    gameApiMock.getShop.mockResolvedValue([{ id: 'hpot', name: 'Healing potion', cost: 50 }])
-    await beginGame()
-    gameApiMock.buyItem.mockResolvedValue({
-      shoppingSuccess: true,
-      gold: 3,
-      lives: 4,
-      level: 0,
-      turn: 5,
-    })
+    gameApiMock.buyItem.mockResolvedValue(
+      gameState({ gold: 3, lives: 4, lastMessage: 'Bought Healing potion.' }),
+    )
 
     await game.buyItem('hpot')
 
+    expect(gameApiMock.buyItem).toHaveBeenCalledWith('game-1', 'hpot')
     expect(game.game.value?.gold).toBe(3)
     expect(game.game.value?.lives).toBe(4)
-    expect(game.game.value?.turn).toBe(5)
     expect(game.lastMessage.value).toBe('Bought Healing potion.')
   })
 
-  it('merges a rejected purchase and reports it', async () => {
-    gameApiMock.getShop.mockResolvedValue([{ id: 'hpot', name: 'Healing potion', cost: 50 }])
-    await beginGame()
-    gameApiMock.buyItem.mockResolvedValue({
-      shoppingSuccess: false,
-      gold: 0,
-      lives: 3,
-      level: 0,
-      turn: 1,
-    })
+  it('keeps a rejected purchase as a failed outcome', async () => {
+    gameApiMock.buyItem.mockResolvedValue(
+      gameState({ lastMessage: 'Could not buy Healing potion.', lastMessageFailed: true }),
+    )
 
     await game.buyItem('hpot')
 
-    expect(game.error.value).toBe('Could not buy Healing potion.')
-    expect(game.game.value?.turn).toBe(1)
+    expect(game.lastMessage.value).toBe('Could not buy Healing potion.')
+    expect(game.lastMessageFailed.value).toBe(true)
   })
 
-  it('keeps a board refresh error over the outcome message', async () => {
-    await beginGame()
-    gameApiMock.solveTask.mockResolvedValue({
-      success: true,
-      lives: 3,
-      gold: 12,
-      score: 12,
-      highScore: 0,
-      turn: 1,
-      message: 'You successfully solved the mission!',
-    })
-    gameApiMock.getTasks.mockRejectedValue(new Error('The game API is down.'))
+  it('reloads the state after a failed action and reports the error', async () => {
+    gameApiMock.solveTask.mockRejectedValue(new Error('The ad has expired.'))
+    gameApiMock.getState.mockResolvedValue(gameState({ tasks: [task], turn: 1 }))
 
     await game.solveTask('ad-1')
 
-    expect(game.error.value).toBe('The game API is down.')
-    expect(game.lastMessage.value).toBeNull()
-  })
-
-  it('keeps a failed board refresh over the purchase outcome', async () => {
-    gameApiMock.getShop.mockResolvedValue([{ id: 'hpot', name: 'Healing potion', cost: 50 }])
-    await beginGame()
-    gameApiMock.buyItem.mockResolvedValue({
-      shoppingSuccess: true,
-      gold: 3,
-      lives: 4,
-      level: 0,
-      turn: 5,
-    })
-    gameApiMock.getTasks.mockRejectedValue(new Error('The game API is down.'))
-
-    await game.buyItem('hpot')
-
-    expect(game.error.value).toBe('The game API is down.')
-    expect(game.lastMessage.value).toBeNull()
-  })
-
-  it('investigates reputation and advances the turn', async () => {
-    await beginGame()
-    gameApiMock.investigateReputation.mockResolvedValue({ people: 0.5, state: -1, underworld: 0 })
-    gameApiMock.getTasks.mockClear()
-
-    await game.investigateReputation()
-
-    expect(gameApiMock.investigateReputation).toHaveBeenCalledWith('game-1')
-    expect(game.reputation.value).toEqual({ people: 0.5, state: -1, underworld: 0 })
-    expect(game.reputationTurn.value).toBe(1)
+    expect(gameApiMock.getState).toHaveBeenCalledWith('game-1')
     expect(game.game.value?.turn).toBe(1)
-    expect(gameApiMock.getTasks).toHaveBeenCalledWith('game-1')
+    expect(game.error.value).toBe('The ad has expired.')
   })
 
-  it('clears the reputation turn when a new game starts', async () => {
-    await beginGame()
-    gameApiMock.investigateReputation.mockResolvedValue({ people: 0.5, state: 0, underworld: 0 })
-    await game.investigateReputation()
-    expect(game.reputationTurn.value).toBe(1)
+  it('treats 410 as game over', async () => {
+    gameApiMock.solveTask.mockRejectedValue(new ApiError('Game over.', 410))
+    gameApiMock.getState.mockResolvedValue(gameState({ lives: 0 }))
 
-    await beginGame()
+    await game.solveTask('ad-1')
 
-    expect(game.reputation.value).toBeNull()
-    expect(game.reputationTurn.value).toBeNull()
+    expect(game.game.value?.lives).toBe(0)
+    expect(game.error.value).toBeNull()
   })
 
-  it('reports errors raised by the API', async () => {
-    gameApiMock.startGame.mockRejectedValue(new Error('The game API is down.'))
+  it('marks the game over on 410 even when the state cannot be reloaded', async () => {
+    gameApiMock.solveTask.mockRejectedValue(new ApiError('Game over.', 410))
+    gameApiMock.getState.mockRejectedValue(new Error('The server could not be reached.'))
 
-    await game.startGame()
+    await game.solveTask('ad-1')
 
-    expect(game.error.value).toBe('The game API is down.')
+    expect(game.game.value?.lives).toBe(0)
+    expect(game.error.value).toBeNull()
   })
 
   it('ignores actions once the game is over', async () => {
-    await beginGame()
-    if (game.game.value) {
-      game.game.value = { ...game.game.value, lives: 0 }
-    }
+    gameApiMock.solveTask.mockResolvedValue(gameState({ lives: 0 }))
+    await game.solveTask('ad-1')
+    gameApiMock.solveTask.mockClear()
+    gameApiMock.buyItem.mockClear()
 
     await game.solveTask('ad-1')
     await game.buyItem('hpot')
@@ -252,126 +142,48 @@ describe('useGame', () => {
     expect(gameApiMock.buyItem).not.toHaveBeenCalled()
   })
 
-  it('reloads the board after a failed task', async () => {
-    await beginGame()
-    gameApiMock.getTasks.mockClear()
-    gameApiMock.solveTask.mockRejectedValue(new Error('The ad has expired.'))
-
-    await game.solveTask('ad-1')
-
-    expect(gameApiMock.getTasks).toHaveBeenCalledWith('game-1')
-    expect(game.error.value).toBe('The ad has expired.')
-  })
-
-  it('reloads the board after a failed investigation', async () => {
-    await beginGame()
-    gameApiMock.getTasks.mockClear()
-    gameApiMock.investigateReputation.mockRejectedValue(new Error('The game API is down.'))
+  it('investigates the reputation', async () => {
+    gameApiMock.investigateReputation.mockResolvedValue(
+      gameState({
+        turn: 1,
+        reputation: { people: 0.5, state: -1, underworld: 0 },
+        reputationTurn: 1,
+      }),
+    )
 
     await game.investigateReputation()
 
-    expect(gameApiMock.getTasks).toHaveBeenCalledWith('game-1')
-    expect(game.error.value).toBe('The game API is down.')
+    expect(gameApiMock.investigateReputation).toHaveBeenCalledWith('game-1')
+    expect(game.reputation.value).toEqual({ people: 0.5, state: -1, underworld: 0 })
+    expect(game.reputationTurn.value).toBe(1)
+    expect(game.game.value?.turn).toBe(1)
   })
 
-  it('clears the previous board when the new one fails to load', async () => {
-    gameApiMock.getTasks.mockResolvedValue([
-      {
-        adId: 'ad-1',
-        message: 'Fix a wagon',
-        reward: 10,
-        expiresIn: 7,
-        encrypted: null,
-        probability: 'Piece of cake',
-      },
-    ])
-    await beginGame()
-    expect(game.tasks.value).toHaveLength(1)
+  it('starts a new game when the stored game is unknown', async () => {
+    gameApiMock.getState.mockRejectedValue(new ApiError('Not Found', 404))
+    gameApiMock.startGame.mockResolvedValue(gameState({ gameId: 'game-2' }))
 
-    gameApiMock.startGame.mockResolvedValue({
-      gameId: 'game-2',
-      lives: 3,
-      gold: 0,
-      level: 0,
-      score: 0,
-      highScore: 0,
-      turn: 0,
-    })
-    gameApiMock.getTasks.mockRejectedValue(new Error('The game API is down.'))
-
-    await game.startGame()
+    await game.refreshState()
 
     expect(game.game.value?.gameId).toBe('game-2')
-    expect(game.tasks.value).toEqual([])
-  })
-
-  it('skips the board refresh when the last life is gone', async () => {
-    await beginGame()
-    gameApiMock.getTasks.mockClear()
-    gameApiMock.solveTask.mockResolvedValue({
-      success: false,
-      lives: 0,
-      gold: 0,
-      score: 0,
-      highScore: 0,
-      turn: 3,
-      message: 'You lost the game!',
-    })
-
-    await game.solveTask('ad-1')
-
-    expect(gameApiMock.getTasks).not.toHaveBeenCalled()
-  })
-
-  it('treats 410 as game over without refetching', async () => {
-    await beginGame()
-    gameApiMock.getTasks.mockClear()
-    gameApiMock.solveTask.mockRejectedValue(new ApiError('Game over.', 410))
-
-    await game.solveTask('ad-1')
-
-    expect(game.game.value?.lives).toBe(0)
-    expect(game.error.value).toBeNull()
-    expect(gameApiMock.getTasks).not.toHaveBeenCalled()
-  })
-
-  it('marks the game over when a board refresh returns 410', async () => {
-    await beginGame()
-    gameApiMock.getTasks.mockRejectedValue(new ApiError('Game over.', 410))
-
-    await game.refreshBoard()
-
-    expect(game.game.value?.lives).toBe(0)
     expect(game.error.value).toBeNull()
   })
 
-  it('keeps the game over state over the action error', async () => {
-    await beginGame()
-    gameApiMock.solveTask.mockRejectedValue(new Error('The ad has expired.'))
-    gameApiMock.getTasks.mockRejectedValue(new ApiError('Game over.', 410))
+  it('refreshes the state through the backend', async () => {
+    gameApiMock.getState.mockResolvedValue(gameState({ turn: 5, tasks: [task] }))
 
-    await game.solveTask('ad-1')
+    await game.ensureGame()
 
-    expect(game.game.value?.lives).toBe(0)
-    expect(game.error.value).toBeNull()
+    expect(gameApiMock.getState).toHaveBeenCalledWith('game-1')
+    expect(game.game.value?.turn).toBe(5)
+    expect(game.tasks.value).toEqual([task])
   })
 
-  it('ignores a second start while one is already running', async () => {
-    let resolveStart: (value: unknown) => void = () => {}
-    gameApiMock.startGame.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveStart = resolve
-        }),
-    )
-    gameApiMock.startGame.mockClear()
+  it('reports errors raised by the API', async () => {
+    gameApiMock.startGame.mockRejectedValue(new Error('The game API is down.'))
 
-    const first = game.startGame()
     await game.startGame()
 
-    expect(gameApiMock.startGame).toHaveBeenCalledTimes(1)
-
-    resolveStart(defaultGame)
-    await first
+    expect(game.error.value).toBe('The game API is down.')
   })
 })

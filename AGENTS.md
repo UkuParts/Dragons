@@ -27,26 +27,41 @@ Run both servers for manual testing: backend on `:8080`, frontend on Vite's port
 
 ## Architecture rules
 
-- The frontend never calls the game API directly. It calls the backend under `/api/games/**`
+- The frontend never calls the game API directly. It calls the backend under `/api/**`
   (Vite proxies `/api` in dev), and the backend calls the game API via `DragonsApiClient`.
 - Frontend navigation uses `vue-router`: `/` (mode selection), `/manual`, `/automatic`.
   `App.vue` renders only `RouterView`.
-- All game state and actions live in the singleton `frontend/src/composables/useGame.ts`.
-  Manual and (future) automatic play must share it rather than reimplementing game logic.
-- The automatic player does not exist yet; `AutomaticGameView.vue` is a placeholder. When
-  implementing it, reuse `useGame`, `services/gameApi.ts`, the components, and the backend proxy.
+- The backend owns the single active game state (`backend/.../game/GameService.java` +
+  `ActiveGame`): starting stores it, every action and `GET /api/games/{gameId}` return the full
+  `GameState`, and the frontend never merges state locally.
+- The automatic player runs **in the backend** one step at a time: `backend/.../auto/AutoPlayer.java`
+  applies the policy in `AutoStrategy.java`: heal at 1 life, buy level items while affordable
+  (keeping a 150-gold reserve, capped at 8 consecutive level purchases, until turn 115), otherwise
+  solve the highest `probability × reward` ad while skipping heists, `Impossible` ads and
+  `Suicide mission` ads before turn 30. When nothing
+  is solvable it waits a turn (buying an unknown item id, capped at 25 consecutive waits) instead
+  of ending the run, and recovers from failed actions using the refreshed state; a failed action
+  that consumes no turn counts toward the same cap and is not recorded as a purchase. `AutoPlayer`
+  owns termination and reports `AutoMoveResult(finished, reason, state)` with `GAME_OVER`,
+  `TURN_LIMIT`, `BOARD_DEAD` or `SKIP_LIMIT`.
+  `frontend/src/composables/useAutoGame.ts` calls `POST /api/auto/games/{gameId}/next-move` once
+  per second until it reports `finished` (retrying transient errors up to five times, honouring
+  `Retry-After` when the backend forwards one), and renders the returned state with the manual-mode
+  components (`readonly` prop).
 - Components under `frontend/src/components/` are presentational: props in, events out. Keep
   API calls out of them.
 - Frontend and backend are same-origin in dev (Vite proxy) and are expected to be deployed behind
   the same origin; there is no CORS configuration.
 - External game API quirks: solving a task, buying an item, and investigating reputation each
-  consume a turn; fetching messages and the shop is free. The reputation endpoint returns no
-  turn number, so `useGame` increments the local turn when it investigates. Reputation values can
-  be fractional. `probability` values from the API map to risk levels in
+  consume a turn; fetching messages and the shop is free. Buying a non-existent item id also
+  consumes a turn, which the auto player uses as its wait action. The reputation endpoint returns
+  no turn number, so the backend increments the stored turn when it investigates. Reputation values
+  can be fractional. `probability` values from the API map to risk levels in
   `frontend/src/utils/probability.ts`. Encrypted tasks (base64, rot13 fallback) are decoded by
-  `frontend/src/utils/decrypt.ts` before display; solves use the decoded ad id. Once the game is
-  over the API returns HTTP 410 for every action; the backend forwards it as 410 and `useGame`
-  marks the local game over instead of refetching.
+  `backend/.../game/AdDecoder.java` before they are stored, so the frontend only sees decoded
+  tasks and solves use the decoded ad id. Once the game is over the API returns HTTP 410 for
+  every action; the backend marks the stored game over and forwards 410, and `useGame` reflects
+  it from the refreshed state instead of refetching the board itself.
 
 ## Conventions
 

@@ -22,16 +22,15 @@ const {
   hasGame,
   isGameOver,
   startGame,
-  refreshBoard,
+  ensureGame,
+  refreshState,
   solveTask,
   buyItem,
   investigateReputation,
 } = useGame()
 
 onMounted(() => {
-  if (!hasGame.value) {
-    startGame()
-  }
+  void ensureGame()
 })
 </script>
 
@@ -53,7 +52,7 @@ onMounted(() => {
           class="button button--ghost"
           type="button"
           :disabled="busy || !hasGame || isGameOver"
-          @click="refreshBoard"
+          @click="refreshState"
         >
           Refresh
         </button>
@@ -112,67 +111,4 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
-.game {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem 0;
-}
-
-.game__header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.game__title {
-  flex: 1;
-  font-size: 1.25rem;
-}
-
-.notice--failure {
-  border-color: #eccbc6;
-  background: #fdf3f1;
-  color: var(--color-danger);
-}
-
-.game__actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 0.25rem;
-}
-
-.game__layout {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(17rem, 1fr);
-  gap: 1rem;
-  align-items: start;
-}
-
-.game__main,
-.game__side {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.game-over {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid #eccbc6;
-  border-radius: var(--radius);
-  background: #fdf3f1;
-}
-
-@media (max-width: 900px) {
-  .game__layout {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="@/styles/game.css"></style>

@@ -36,4 +36,10 @@ describe('ShopPanel', () => {
 
     expect(allDisabled).toBe(true)
   })
+
+  it('hides the purchase buttons in read-only mode', () => {
+    const wrapper = mount(ShopPanel, { props: { items, gold: 100, busy: false, readOnly: true } })
+
+    expect(wrapper.findAll('button')).toHaveLength(0)
+  })
 })

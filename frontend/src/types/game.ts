@@ -31,20 +31,19 @@ export interface ShopItem {
   cost: number
 }
 
-export interface SolveResult {
-  success: boolean
-  lives: number
-  gold: number
-  score: number
-  highScore: number
-  turn: number
-  message: string
+export interface GameState extends Game {
+  tasks: Task[]
+  shopItems: ShopItem[]
+  reputation: Reputation | null
+  reputationTurn: number | null
+  lastMessage: string | null
+  lastMessageFailed: boolean
 }
 
-export interface PurchaseResult {
-  shoppingSuccess: boolean
-  gold: number
-  lives: number
-  level: number
-  turn: number
+export type AutoStopReason = 'GAME_OVER' | 'TURN_LIMIT' | 'BOARD_DEAD' | 'SKIP_LIMIT'
+
+export interface AutoMoveResult {
+  finished: boolean
+  reason: AutoStopReason | null
+  state: GameState
 }

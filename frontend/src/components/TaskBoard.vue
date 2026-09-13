@@ -7,6 +7,7 @@ import { probabilityRank, probabilityRisk } from '@/utils/probability'
 const props = defineProps<{
   tasks: Task[]
   busy: boolean
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{ solve: [adId: string] }>()
@@ -39,6 +40,7 @@ const sortedTasks = computed(() =>
           </div>
         </div>
         <button
+          v-if="!readOnly"
           class="button task__action"
           type="button"
           :disabled="busy"

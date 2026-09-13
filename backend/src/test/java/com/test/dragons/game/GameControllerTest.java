@@ -1,6 +1,5 @@
 package com.test.dragons.game;
 
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -21,13 +20,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.test.dragons.game.dto.Ad;
-import com.test.dragons.game.dto.GameStart;
-import com.test.dragons.game.dto.PurchaseResult;
+import com.test.dragons.game.dto.GameState;
 import com.test.dragons.game.dto.Reputation;
 import com.test.dragons.game.dto.ShopItem;
-import com.test.dragons.game.dto.SolveResult;
 
 @WebMvcTest(GameController.class)
 class GameControllerTest {
@@ -36,106 +34,91 @@ class GameControllerTest {
 	private MockMvc mockMvc;
 
 	@MockitoBean
-	private DragonsApiClient dragonsApi;
+	private GameService games;
+
+	private static GameState state() {
+		return new GameState("game-1", 3, 0, 0, 0, 0, 0,
+				List.of(new Ad("ad-1", "Fix a wagon", 10, 7, true, "Piece of cake")),
+				List.of(new ShopItem("hpot", "Healing potion", 50)), null, null, null, false);
+	}
 
 	@Test
 	void startsANewGame() throws Exception {
-		given(dragonsApi.startGame()).willReturn(new GameStart("game-1", 3, 0, 0, 0, 0, 0));
+		given(games.start()).willReturn(state());
 
 		mockMvc.perform(post("/api/games"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.gameId").value("game-1"))
-				.andExpect(jsonPath("$.lives").value(3));
+				.andExpect(jsonPath("$.lives").value(3))
+				.andExpect(jsonPath("$.tasks[0].adId").value("ad-1"))
+				.andExpect(jsonPath("$.shopItems[0].id").value("hpot"));
 	}
 
 	@Test
-	void listsMessages() throws Exception {
-		given(dragonsApi.getMessages("game-1"))
-				.willReturn(List.of(new Ad("ad-1", "Fix a wagon", 10, 7, true, "Piece of cake")));
+	void returnsTheStoredState() throws Exception {
+		given(games.current("game-1")).willReturn(state());
 
-		mockMvc.perform(get("/api/games/game-1/messages"))
+		mockMvc.perform(get("/api/games/game-1"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[0].adId").value("ad-1"))
-				.andExpect(jsonPath("$[0].encrypted").value(true))
-				.andExpect(jsonPath("$[0].probability").value("Piece of cake"));
+				.andExpect(jsonPath("$.gameId").value("game-1"));
 	}
 
 	@Test
 	void solvesAMessage() throws Exception {
-		given(dragonsApi.solveMessage("game-1", "ad-1"))
-				.willReturn(new SolveResult(true, 3, 10, 10, 0, 1, "You successfully solved the mission!"));
+		given(games.solve("game-1", "ad-1")).willReturn(state());
 
 		mockMvc.perform(post("/api/games/game-1/solve/ad-1"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.success").value(true))
-				.andExpect(jsonPath("$.gold").value(10));
+				.andExpect(jsonPath("$.gameId").value("game-1"));
 
-		verify(dragonsApi).solveMessage("game-1", "ad-1");
-	}
-
-	@Test
-	void listsShopItems() throws Exception {
-		given(dragonsApi.getShopItems("game-1"))
-				.willReturn(List.of(new ShopItem("hpot", "Healing potion", 50)));
-
-		mockMvc.perform(get("/api/games/game-1/shop"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[0].id").value("hpot"))
-				.andExpect(jsonPath("$[0].cost").value(50));
+		verify(games).solve("game-1", "ad-1");
 	}
 
 	@Test
 	void buysAnItem() throws Exception {
-		given(dragonsApi.buyItem("game-1", "hpot"))
-				.willReturn(new PurchaseResult(true, 0, 4, 0, 5));
+		given(games.buy("game-1", "hpot")).willReturn(state());
 
 		mockMvc.perform(post("/api/games/game-1/shop/buy/hpot"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.shoppingSuccess").value(true))
-				.andExpect(jsonPath("$.lives").value(4));
+				.andExpect(status().isOk());
 
-		verify(dragonsApi).buyItem(eq("game-1"), eq("hpot"));
+		verify(games).buy("game-1", "hpot");
 	}
 
 	@Test
 	void investigatesReputation() throws Exception {
-		given(dragonsApi.investigateReputation("game-1"))
-				.willReturn(new Reputation(1.5, 0, -2));
+		given(games.investigateReputation("game-1")).willReturn(new GameState("game-1", 3, 0, 0, 0, 0, 1,
+				List.of(), List.of(), new Reputation(1.5, 0, -2), 1, null, false));
 
 		mockMvc.perform(post("/api/games/game-1/investigate/reputation"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.people").value(1.5))
-				.andExpect(jsonPath("$.underworld").value(-2));
+				.andExpect(jsonPath("$.reputation.people").value(1.5))
+				.andExpect(jsonPath("$.reputationTurn").value(1));
 	}
 
 	@Test
-	void mapsUnknownGameToNotFound() throws Exception {
-		given(dragonsApi.getMessages("missing"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY,
-						new byte[0], null));
+	void mapsUnknownGamesToNotFound() throws Exception {
+		given(games.current("missing")).willThrow(new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-		mockMvc.perform(get("/api/games/missing/messages"))
-				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.error").exists());
+		mockMvc.perform(get("/api/games/missing"))
+				.andExpect(status().isNotFound());
 	}
 
 	@Test
 	void mapsGameOverToGone() throws Exception {
-		given(dragonsApi.getMessages("game-1"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.GONE, "Game Over", HttpHeaders.EMPTY,
-						"{\"status\":\"Game Over\"}".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
+		given(games.solve("game-1", "ad-1")).willThrow(HttpClientErrorException.create(HttpStatus.GONE,
+				"Game Over", HttpHeaders.EMPTY,
+				"{\"status\":\"Game Over\"}".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
 
-		mockMvc.perform(get("/api/games/game-1/messages"))
+		mockMvc.perform(post("/api/games/game-1/solve/ad-1"))
 				.andExpect(status().isGone())
 				.andExpect(jsonPath("$.error").value("Game Over"));
 	}
 
 	@Test
 	void forwardsRejectedActionMessages() throws Exception {
-		given(dragonsApi.solveMessage("game-1", "ad-1"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.UNPROCESSABLE_ENTITY, "Unprocessable Entity",
-						HttpHeaders.EMPTY, "{\"error\":\"The ad has expired.\"}".getBytes(StandardCharsets.UTF_8),
-						StandardCharsets.UTF_8));
+		given(games.solve("game-1", "ad-1")).willThrow(HttpClientErrorException.create(
+				HttpStatus.UNPROCESSABLE_ENTITY, "Unprocessable Entity", HttpHeaders.EMPTY,
+				"{\"error\":\"The ad has expired.\"}".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
 
 		mockMvc.perform(post("/api/games/game-1/solve/ad-1"))
 				.andExpect(status().isUnprocessableEntity())
@@ -143,24 +126,11 @@ class GameControllerTest {
 	}
 
 	@Test
-	void usesGenericMessageForNonJsonErrors() throws Exception {
-		given(dragonsApi.getMessages("game-1"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.BAD_GATEWAY, "Bad Gateway", HttpHeaders.EMPTY,
-						"<html>no json here</html>".getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8));
+	void mapsTransportFailuresToBadGateway() throws Exception {
+		given(games.current("game-1")).willThrow(new RestClientException("Connection refused"));
 
-		mockMvc.perform(get("/api/games/game-1/messages"))
+		mockMvc.perform(get("/api/games/game-1"))
 				.andExpect(status().isBadGateway())
-				.andExpect(jsonPath("$.error").value("The Dragons of Mugloar API rejected the request."));
-	}
-
-	@Test
-	void mapsRateLimitingToTooManyRequests() throws Exception {
-		given(dragonsApi.getMessages("game-1"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests",
-						HttpHeaders.EMPTY, new byte[0], null));
-
-		mockMvc.perform(get("/api/games/game-1/messages"))
-				.andExpect(status().isTooManyRequests())
 				.andExpect(jsonPath("$.error").exists());
 	}
 
@@ -168,34 +138,11 @@ class GameControllerTest {
 	void forwardsRetryAfterWhenRateLimited() throws Exception {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.RETRY_AFTER, "7");
-		given(dragonsApi.getMessages("game-1"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests",
-						headers, new byte[0], null));
+		given(games.current("game-1")).willThrow(HttpClientErrorException.create(
+				HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, new byte[0], null));
 
-		mockMvc.perform(get("/api/games/game-1/messages"))
+		mockMvc.perform(get("/api/games/game-1"))
 				.andExpect(status().isTooManyRequests())
 				.andExpect(header().string(HttpHeaders.RETRY_AFTER, "7"));
-	}
-
-	@Test
-	void forwardsUnexpectedClientErrors() throws Exception {
-		given(dragonsApi.getMessages("game-1"))
-				.willThrow(HttpClientErrorException.create(HttpStatus.FORBIDDEN, "Forbidden", HttpHeaders.EMPTY,
-						"{\"error\":\"Blocked by the game API.\"}".getBytes(StandardCharsets.UTF_8),
-						StandardCharsets.UTF_8));
-
-		mockMvc.perform(get("/api/games/game-1/messages"))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.error").value("Blocked by the game API."));
-	}
-
-	@Test
-	void mapsTransportFailuresToBadGateway() throws Exception {
-		given(dragonsApi.getMessages("game-1")).willThrow(new RestClientException("Connection refused"));
-
-		mockMvc.perform(get("/api/games/game-1/messages"))
-				.andExpect(status().isBadGateway())
-				.andExpect(jsonPath("$.error").exists())
-				.andExpect(jsonPath("$.detail").doesNotExist());
 	}
 }

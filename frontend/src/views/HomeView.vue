@@ -8,22 +8,18 @@ const modes: {
   title: string
   description: string
   cta: string
-  muted: boolean
 }[] = [
   {
     mode: 'manual',
     title: 'Manual',
-    description:
-      'Pick missions from the message board, buy equipment and try to get a high score.',
+    description: 'Pick missions from the message board, buy equipment and try to get a high score.',
     cta: 'Play manually',
-    muted: false,
   },
   {
     mode: 'automatic',
     title: 'Automatic',
-    description: 'Watch an automated player do its best.',
-    cta: 'Preview',
-    muted: true,
+    description: 'Watch an automated player run the best-known strategy from start to game over.',
+    cta: 'Watch a run',
   },
 ]
 </script>
@@ -39,13 +35,7 @@ const modes: {
     </header>
 
     <div class="home__modes">
-      <RouterLink
-        v-for="mode in modes"
-        :key="mode.mode"
-        class="mode"
-        :class="{ 'mode--muted': mode.muted }"
-        :to="{ name: mode.mode }"
-      >
+      <RouterLink v-for="mode in modes" :key="mode.mode" class="mode" :to="{ name: mode.mode }">
         <span class="mode__title">{{ mode.title }}</span>
         <span class="mode__description">{{ mode.description }}</span>
         <span class="mode__cta">{{ mode.cta }}</span>
@@ -129,9 +119,5 @@ const modes: {
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--color-accent);
-}
-
-.mode--muted .mode__cta {
-  color: var(--color-text-muted);
 }
 </style>

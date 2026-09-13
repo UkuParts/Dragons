@@ -1,57 +1,45 @@
 package com.test.dragons.game;
 
-import java.util.List;
-
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.test.dragons.game.dto.Ad;
-import com.test.dragons.game.dto.GameStart;
-import com.test.dragons.game.dto.PurchaseResult;
-import com.test.dragons.game.dto.Reputation;
-import com.test.dragons.game.dto.ShopItem;
-import com.test.dragons.game.dto.SolveResult;
+import com.test.dragons.game.dto.GameState;
 
 @RestController
 @RequestMapping("/api/games")
 public class GameController {
 
-	private final DragonsApiClient dragonsApi;
+	private final GameService games;
 
-	public GameController(DragonsApiClient dragonsApi) {
-		this.dragonsApi = dragonsApi;
+	public GameController(GameService games) {
+		this.games = games;
 	}
 
 	@PostMapping
-	public GameStart startGame() {
-		return dragonsApi.startGame();
+	public GameState startGame() {
+		return games.start();
 	}
 
-	@GetMapping("/{gameId}/messages")
-	public List<Ad> getMessages(@PathVariable String gameId) {
-		return dragonsApi.getMessages(gameId);
+	@GetMapping("/{gameId}")
+	public GameState getState(@PathVariable String gameId) {
+		return games.current(gameId);
 	}
 
 	@PostMapping("/{gameId}/solve/{adId}")
-	public SolveResult solveMessage(@PathVariable String gameId, @PathVariable String adId) {
-		return dragonsApi.solveMessage(gameId, adId);
-	}
-
-	@GetMapping("/{gameId}/shop")
-	public List<ShopItem> getShopItems(@PathVariable String gameId) {
-		return dragonsApi.getShopItems(gameId);
+	public GameState solveMessage(@PathVariable String gameId, @PathVariable String adId) {
+		return games.solve(gameId, adId);
 	}
 
 	@PostMapping("/{gameId}/shop/buy/{itemId}")
-	public PurchaseResult buyItem(@PathVariable String gameId, @PathVariable String itemId) {
-		return dragonsApi.buyItem(gameId, itemId);
+	public GameState buyItem(@PathVariable String gameId, @PathVariable String itemId) {
+		return games.buy(gameId, itemId);
 	}
 
 	@PostMapping("/{gameId}/investigate/reputation")
-	public Reputation investigateReputation(@PathVariable String gameId) {
-		return dragonsApi.investigateReputation(gameId);
+	public GameState investigateReputation(@PathVariable String gameId) {
+		return games.investigateReputation(gameId);
 	}
 }

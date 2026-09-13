@@ -65,4 +65,10 @@ describe('TaskBoard', () => {
 
     expect(allDisabled).toBe(true)
   })
+
+  it('hides the actions in read-only mode', () => {
+    const wrapper = mount(TaskBoard, { props: { tasks, busy: false, readOnly: true } })
+
+    expect(wrapper.findAll('button')).toHaveLength(0)
+  })
 })
